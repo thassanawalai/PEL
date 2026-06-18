@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support, con
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from configs import Config
-from models import create_model
+from models import create_model, create_pel_model
 from utils import get_test_dataloader
 
 
@@ -33,16 +33,37 @@ class Evaluator:
         self.config = config
         self.device = torch.device(config.DEVICE if torch.cuda.is_available() else "cpu")
         
-        # Load model
-        self.model = create_model(
-            num_classes=config.NUM_CLASSES,
-            backbone_name=config.MODEL_NAME,
-            pretrained=False
-        ).to(self.device)
-        
         # Load checkpoint
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        state_dict = checkpoint["model_state_dict"]
+        use_pel = checkpoint.get("use_pel")
+        if use_pel is None:
+            use_pel = "prototypes" in state_dict
+        num_classes = config.NUM_CLASSES
+        if num_classes is None:
+            if "prototypes" in state_dict:
+                num_classes = state_dict["prototypes"].shape[0]
+            elif "head.8.weight" in state_dict:
+                num_classes = state_dict["head.8.weight"].shape[0]
+            else:
+                num_classes = len([p for p in Path(config.TEST_DIR).iterdir() if p.is_dir()])
+
+        if use_pel:
+            self.model = create_pel_model(
+                num_classes=num_classes,
+                backbone_name=config.MODEL_NAME,
+                pretrained=False,
+                feature_dim=config.PEL_FEATURE_DIM,
+                temperature=config.PEL_TEMPERATURE,
+            ).to(self.device)
+        else:
+            self.model = create_model(
+                num_classes=num_classes,
+                backbone_name=config.MODEL_NAME,
+                pretrained=False,
+            ).to(self.device)
+
+        self.model.load_state_dict(state_dict)
         self.model.eval()
         
         print(f"Model loaded from {checkpoint_path}")
@@ -67,7 +88,8 @@ class Evaluator:
                 labels = labels.to(self.device)
                 
                 outputs = self.model(images)
-                _, predicted = torch.max(outputs.data, 1)
+                logits = outputs["logits"] if isinstance(outputs, dict) else outputs
+                _, predicted = torch.max(logits.data, 1)
                 
                 all_preds.extend(predicted.cpu().numpy())
                 all_labels.extend(labels.cpu().numpy())

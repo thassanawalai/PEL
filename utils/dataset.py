@@ -25,13 +25,14 @@ class UFFGVCDataset(Dataset):
             transform (torchvision.transforms.Compose, optional): Data transformations.
         """
         self.root_dir = Path(root_dir)
+        if not self.root_dir.exists():
+            raise FileNotFoundError(f"Dataset root directory not found: {root_dir}")
+
         self.image_folder = datasets.ImageFolder(root=str(self.root_dir), transform=transform)
         self.transform = transform
         self.num_classes = len(self.image_folder.classes)
         self.classes = self.image_folder.classes
-        
-        if not self.root_dir.exists():
-            raise FileNotFoundError(f"Dataset root directory not found: {root_dir}")
+        self.class_to_idx = self.image_folder.class_to_idx
     
     def __len__(self):
         """Return the total number of samples."""
@@ -97,14 +98,22 @@ def get_dataloaders(config):
         root_dir=str(config.VAL_DIR),
         transform=val_transforms
     )
+
+    if train_dataset.classes != val_dataset.classes:
+        raise ValueError(
+            "Train/validation class folders do not match. "
+            f"Train={train_dataset.classes}, Val={val_dataset.classes}"
+        )
     
+    pin_memory = bool(config.PIN_MEMORY and torch.cuda.is_available())
+
     # Create DataLoaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.BATCH_SIZE,
         shuffle=True,
         num_workers=config.NUM_WORKERS,
-        pin_memory=config.PIN_MEMORY
+        pin_memory=pin_memory
     )
     
     val_loader = DataLoader(
@@ -112,7 +121,7 @@ def get_dataloaders(config):
         batch_size=config.BATCH_SIZE,
         shuffle=False,
         num_workers=config.NUM_WORKERS,
-        pin_memory=config.PIN_MEMORY
+        pin_memory=pin_memory
     )
     
     return train_loader, val_loader
@@ -146,7 +155,7 @@ def get_test_dataloader(config, test_dir=None):
         batch_size=config.BATCH_SIZE,
         shuffle=False,
         num_workers=config.NUM_WORKERS,
-        pin_memory=config.PIN_MEMORY
+        pin_memory=bool(config.PIN_MEMORY and torch.cuda.is_available())
     )
     
     return test_loader

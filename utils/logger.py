@@ -22,6 +22,9 @@ def setup_logger(name, log_file=None, level=logging.INFO):
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    logger.propagate = False
+    if logger.handlers:
+        return logger
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)

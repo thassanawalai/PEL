@@ -1,4 +1,6 @@
-"""Models module."""
-from .model import create_model, UFFGVCClassifier
+"""Model factories."""
 
-__all__ = ["create_model", "UFFGVCClassifier"]
+from .model import UFFGVCClassifier, create_model
+from .pel_model import PELClassifier, create_pel_model
+
+__all__ = ["UFFGVCClassifier", "create_model", "PELClassifier", "create_pel_model"]
